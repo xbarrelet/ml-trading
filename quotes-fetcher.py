@@ -6,7 +6,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 
-BINANCE_URL = "https://api1.binance.com/api/v3/klines?symbol=$SYMBOLUSDT&interval=$INTERVALm&limit=1000&startTime=$START_TIMESTAMP"
+BINANCE_URL = "https://api1.binance.com/api/v3/klines?symbol=$SYMBOLUSDT&interval=$INTERVAL&limit=1000&startTime=$START_TIMESTAMP"
 
 
 connection_url = 'postgresql://postgres:postgres123@localhost:5429/quotes'
@@ -25,7 +25,8 @@ def save_quotes(quotes: list[tuple]) -> None:
 
 
 if __name__ == '__main__':
-    intervals = [15]
+    intervals = ["1h"]
+    # intervals = [30]
     symbols = ["ADA"]
     from_timestamp = 0
 
@@ -41,11 +42,13 @@ if __name__ == '__main__':
 
                 if len(binance_quotes) < 2:
                     has_finished = True
+                    print("\nQuotes fetched, exiting.")
                     continue
                 else:
                     print(f"Fetched {len(binance_quotes)} quotes from:{datetime.fromtimestamp(from_timestamp / 1000)}")
 
-                quotes = [(quote[4], quote[2], interval, quote[3], quote[1], quote[0] / 1000, symbol)
+                quotes = [(quote[4], quote[2], interval if "h" not in interval else int(interval.split("h")[0]) * 60,
+                           quote[3], quote[1], quote[0] / 1000, symbol)
                           for quote in binance_quotes]
                 save_quotes(quotes)
 
