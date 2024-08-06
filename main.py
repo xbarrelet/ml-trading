@@ -36,7 +36,7 @@ if __name__ == '__main__':
     # os.mkdir(RESULTS_PATH)
 
     df = prepare_df(symbol="ADA", interval=30)
-    
+
     df = df.head(1000)
 
     set_without_target_column_values = df.drop("next_close", axis=1)
