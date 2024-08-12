@@ -171,3 +171,5 @@ resources/
 *BAK*
 .~lock*
 *.zip
+
+*results*/

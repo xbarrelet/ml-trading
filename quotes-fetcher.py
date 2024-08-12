@@ -25,7 +25,7 @@ def save_quotes(quotes: list[tuple]) -> None:
 
 
 if __name__ == '__main__':
-    intervals = ["1h"]
+    intervals = ["1m"]
     # intervals = [30]
     symbols = ["ADA"]
     from_timestamp = 0
@@ -47,7 +47,14 @@ if __name__ == '__main__':
                 else:
                     print(f"Fetched {len(binance_quotes)} quotes from:{datetime.fromtimestamp(from_timestamp / 1000)}")
 
-                quotes = [(quote[4], quote[2], interval if "h" not in interval else int(interval.split("h")[0]) * 60,
+                if "h" in interval:
+                    db_interval = int(interval.split("h")[0]) * 60
+                elif "m" in interval:
+                    db_interval = int(interval.split("m")[0])
+                else:
+                    db_interval = interval
+
+                quotes = [(quote[4], quote[2], db_interval,
                            quote[3], quote[1], quote[0] / 1000, symbol)
                           for quote in binance_quotes]
                 save_quotes(quotes)
