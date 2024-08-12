@@ -1,6 +1,6 @@
 import os
 import shutil
-
+import pandas_ta as ta
 import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -11,6 +11,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import adjusted_rand_score
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
+from xgboost import XGBRegressor
 
 connection_url = 'postgresql://postgres:postgres123@localhost:5429/quotes'
 db_pool = ConnectionPool(connection_url, min_size=4, max_size=20, kwargs={"row_factory": dict_row, "autocommit": True})
@@ -80,7 +81,7 @@ def create_feature_importance_plots(model, keys, interval):
 
         for result in sorted(zip(feature_importances, keys), reverse=True):
             score = result[0]
-            if score > 0.01:
+            if score > 0.1:
                 features.append({"name": result[1], "score": score})
 
     elif hasattr(model, 'coef_'):
@@ -112,6 +113,52 @@ def generate_predictions_vs_prices_plot(results, interval):
     plt.close()
 
 
+def add_indicators_to_df(df):
+    for sma_index in range(5, 201, 5):
+        df[f'sma_{sma_index}'] = ta.sma(df["close"], length=sma_index)
+    print("Added sma indicators.")
+    # df['sma_50'] = ta.sma(df["close"], length=50)
+    # df['sma_200'] = ta.sma(df["close"], length=200)
+
+    for ema_index in range(5, 50, 1):
+        df[f'ema_{ema_index}'] = ta.ema(df["close"], length=ema_index)
+    print("Added ema indicators.")
+
+    for rsi_length in range(5, 26):
+        df[f'rsi_{rsi_length}'] = ta.rsi(df["close"], length=rsi_length)
+    print("Added rsi indicators.")
+    # df['rsi'] = ta.rsi(df["close"])
+
+    for bbands_length in range(10, 36, 5):
+        bbands_df = ta.bbands(df["close"], length=bbands_length)
+        df = pd.concat([df, bbands_df], axis=1)
+    print("Added bbands indicators.")
+    # bbands_df = ta.bbands(df["close"], length=20)
+    # df = pd.concat([df, bbands_df], axis=1)
+
+    macd_df = ta.macd(df["close"], fast=8, slow=21)
+    df = pd.concat([df, macd_df], axis=1)
+
+    # df['sma_volume'] = ta.sma(df["volume"], length=20)
+
+    df.dropna(inplace=True)
+
+    return df
+
+
+def simulate_trading(model, validation_df, interval):
+    profit = 0.0
+    last_close = 0.0
+    last_buy_sell = None
+    last_order_direction = None
+
+    for index, row in df.iterrows():
+        current_close = row['close']
+        print(f"row:{row}")
+        prediction_next_close = model.predict(row)
+        print(f"current_close:{current_close}, prediction_next_close:{prediction_next_close}")
+
+
 if __name__ == '__main__':
     print("Starting training script.\n")
     shutil.rmtree(RESULTS_PATH)
@@ -120,20 +167,26 @@ if __name__ == '__main__':
     ari_results = {}
     nrmse_results = {}
     for interval in [
+        # 1,
         # 5,
-        # 15,
+        15,
         # 30,
-        60
+        # 60
     ]:
-        print(f"Starting training for interval:{interval}.\n")
+        print(f"Starting training for interval: {interval}min.\n")
+        # TODO: add volume to db
         df = prepare_df(symbol="ADA", interval=interval)
+
+        for column in df.columns:
+            df[column] = df[column].astype(float)
 
         df.sort_values(by="timestamp", inplace=True)
         df.drop("timestamp", axis=1, inplace=True)
 
-        # output = talib.SMA(close)
-
-        # df = df.head(10000)
+        # https://github.com/twopirllc/pandas-ta
+        print("Adding now indicators to our dataset.\n")
+        df = add_indicators_to_df(df)
+        print("\nFinished adding indicators to our dataset.\n")
 
         scaler = MinMaxScaler()
         df[df.columns] = scaler.fit_transform(df)
@@ -151,17 +204,16 @@ if __name__ == '__main__':
         print(f"training set size:{len(x_train)}, test set size:{len(x_test)}\n")
 
         # rf_hyperparameters = {'max_depth': [7], 'max_features': [4]}
-        rf_hyperparameters = {'max_depth': range(2, 8), 'max_features': range(2, 10)}
+        # rf_hyperparameters = {'max_depth': range(2, 8), 'max_features': range(2, 10)}
+        xgb_hyperparameters = {'max_depth': [7]}
         # xgb_hyperparameters = {'max_depth': range(2, 15)}
 
-        # https://github.com/ta-lib/ta-lib-python?tab=readme-ov-file#function-api
-
         # Try xgboost.XGBRegressor
-        # grid_search_cv = GridSearchCV(XGBRegressor(tree_method="hist", n_estimators=100), xgb_hyperparameters,
-        grid_search_cv = GridSearchCV(RandomForestRegressor(n_estimators=100), rf_hyperparameters,
+        grid_search_cv = GridSearchCV(XGBRegressor(tree_method="hist", n_estimators=100), xgb_hyperparameters,
+        # grid_search_cv = GridSearchCV(RandomForestRegressor(n_estimators=100), rf_hyperparameters,
                                       cv=2,
                                       scoring='neg_root_mean_squared_error',
-                                      n_jobs=-1,
+                                      n_jobs=1,
                                       return_train_score=True,
                                       # verbose=2
                                       )
@@ -186,9 +238,9 @@ if __name__ == '__main__':
         ari_results[interval] = ari_score
         print(f"ari_score:{ari_score}")
 
-        generate_predictions_vs_prices_plot(results, interval)
-
         create_feature_importance_plots(grid_search_cv.best_estimator_, x_train.keys(), interval)
+        generate_predictions_vs_prices_plot(results, interval)
+        simulate_trading(grid_search_cv.best_estimator_, validation_df, interval)
 
         print(f"Finished training for interval:{interval}.\n")
 

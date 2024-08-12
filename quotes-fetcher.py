@@ -1,13 +1,10 @@
 from datetime import datetime
-from pprint import pprint
 
 import requests
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-
 BINANCE_URL = "https://api1.binance.com/api/v3/klines?symbol=$SYMBOLUSDT&interval=$INTERVAL&limit=1000&startTime=$START_TIMESTAMP"
-
 
 connection_url = 'postgresql://postgres:postgres123@localhost:5429/quotes'
 db_pool = ConnectionPool(connection_url, min_size=4, max_size=20, kwargs={"row_factory": dict_row, "autocommit": True})
@@ -29,6 +26,24 @@ if __name__ == '__main__':
     # intervals = [30]
     symbols = ["ADA"]
     from_timestamp = 0
+
+    binance_response = """
+    [
+  [
+    1591258320000,      	// Open time
+    "9640.7",       	 	// Open
+    "9642.4",       	 	// High
+    "9640.6",       	 	// Low
+    "9642.0",      	 	 	// Close (or latest price)
+    "206", 			 		// Volume
+    1591258379999,       	// Close time
+    "2.13660389",    		// Base asset volume
+    48,             		// Number of trades
+    "119",    				// Taker buy volume
+    "1.23424865",      		// Taker buy base asset volume
+    "0" 					// Ignore.
+  ]
+]"""
 
     for symbol in symbols:
         for interval in intervals:
