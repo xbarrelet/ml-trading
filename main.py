@@ -1,13 +1,13 @@
 import os
 import shutil
-import pandas_ta as ta
+
 import pandas as pd
+import pandas_ta as ta
 import seaborn as sns
 from matplotlib import pyplot as plt
 from pandas import DataFrame
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
-from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import adjusted_rand_score
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import MinMaxScaler
@@ -142,17 +142,19 @@ def add_indicators_to_df(df):
     # df['sma_volume'] = ta.sma(df["volume"], length=20)
 
     df.dropna(inplace=True)
+    df = df.reindex(sorted(df.columns), axis=1)
 
     return df
 
 
 def simulate_trading(model, validation_df, interval):
+    validation_df = validation_df.reindex(sorted(validation_df.columns), axis=1)
     profit = 0.0
     last_close = 0.0
     last_buy_sell = None
     last_order_direction = None
 
-    for index, row in df.iterrows():
+    for index, row in validation_df.iterrows():
         current_close = row['close']
         print(f"row:{row}")
         prediction_next_close = model.predict(row)
@@ -188,6 +190,13 @@ if __name__ == '__main__':
         df = add_indicators_to_df(df)
         print("\nFinished adding indicators to our dataset.\n")
 
+        # TODO: You should add a column with a prepared signal to buy (1), sell(2) or pass(0), that's the prediction.
+        # Or find another prediction, I don't think the next_close is the most interesting value to predict.
+        # Like profit until next reversal, signal when a reversal occurs, ...
+
+        # TODO: You can use Claude fex to convert pinescript to Java to add some custom indicators like T3 and such
+        # Ask it directly how to train a deep model (layers and cie) to be profitable and what indicators to include
+
         scaler = MinMaxScaler()
         df[df.columns] = scaler.fit_transform(df)
 
@@ -200,7 +209,7 @@ if __name__ == '__main__':
         target_column_values = df["next_close"]
 
         x_train, x_test, y_train, y_test = train_test_split(set_without_target_column_values, target_column_values,
-                                                            test_size=0.2, random_state=42)
+                                                            test_size=0.2)
         print(f"training set size:{len(x_train)}, test set size:{len(x_test)}\n")
 
         # rf_hyperparameters = {'max_depth': [7], 'max_features': [4]}
@@ -209,8 +218,8 @@ if __name__ == '__main__':
         # xgb_hyperparameters = {'max_depth': range(2, 15)}
 
         # Try xgboost.XGBRegressor
-        grid_search_cv = GridSearchCV(XGBRegressor(tree_method="hist", n_estimators=100), xgb_hyperparameters,
-        # grid_search_cv = GridSearchCV(RandomForestRegressor(n_estimators=100), rf_hyperparameters,
+        grid_search_cv = GridSearchCV(XGBRegressor(n_estimators=100, device='cuda'), xgb_hyperparameters,
+                                      # grid_search_cv = GridSearchCV(RandomForestRegressor(n_estimators=100), rf_hyperparameters,
                                       cv=2,
                                       scoring='neg_root_mean_squared_error',
                                       n_jobs=1,
